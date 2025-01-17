@@ -165,6 +165,12 @@ jobs:
       - name: Capture S3 bucket URL
         id: capture_s3_url
         run: terraform output -raw s3_bucket_website_url > s3_url.txt
+      
+      # Step 21: Set S3 bucket URL
+      - name: Set S3 bucket URL
+        run: |
+          S3_BUCKET_URL=$(grep -oP '^[^:]*' s3_url.txt)
+          echo "S3_BUCKET_URL=${S3_BUCKET_URL}" >> $GITHUB_ENV
 
       # Step 21: Print S3 bucket URL
       - name: Capture S3 bucket URL
