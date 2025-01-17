@@ -1,6 +1,9 @@
 name: Destroy Terraform Workflow
 on:
   push:
+    branches:
+      - main
+
 
 permissions:
   contents: read
