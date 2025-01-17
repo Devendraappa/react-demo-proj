@@ -165,10 +165,3 @@ jobs:
       - name: Deploy React App to S3
         run: |
           aws s3 sync build/ s3://${{ secrets.S3_BUCKET_NAME }}/ --delete
-```
-
-### Explanation
-
-- **Force Unlock Terraform State**: This step attempts to force unlock the Terraform state before running any Terraform commands. Replace `<LOCK_ID>` with the actual lock ID from the error message.
-
-This should help resolve the state lock issue and ensure your workflow runs smoothly. Let me know if you need any further assistance!
