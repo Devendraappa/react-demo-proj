@@ -24,7 +24,6 @@ resource "aws_s3_bucket_object" "react_app_files" {
   bucket   = aws_s3_bucket.react_app_bucket.bucket
   key      = each.key
   source   = "./dist/${each.key}"
-  # Remove the ACL setting
 }
 
 # Output the S3 bucket website URL
