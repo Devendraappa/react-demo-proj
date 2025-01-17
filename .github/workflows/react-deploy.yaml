@@ -32,84 +32,26 @@ jobs:
 
       # Initialize Terraform (INFO logging)
       - name: Terraform Init
-        env:
-          TF_LOG: INFO  # Set Terraform logging to INFO for general info messages
         run: terraform init
 
       # Terraform Validate (DEBUG logging)
       - name: Terraform Validate
-        env:
-          TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed logs
-          TF_LOG_PATH: terraform_validate.log
-        run: |
-          terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
+        run: terraform validate
 
       # Terraform Plan (INFO logging)
       - name: Terraform Plan
-        env:
-          TF_LOG: INFO  # Set Terraform logging to INFO for plan-related logs
-          TF_LOG_PATH: terraform_plan.log
-        run: |
-          terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
+        run: terraform plan -out=tfplan
 
       # Terraform Apply (TRACE logging)
       - name: Terraform Apply
-        env:
-          TF_LOG: TRACE  # Set Terraform logging to TRACE for detailed logs
-          TF_LOG_PATH: terraform_apply.log
+        run: terraform apply -auto-approve tfplan
+
+      # Copy Logs to S3
+      - name: Upload Terraform Logs to S3
+        if: always()
         run: |
-          terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
-
-      # Ensure Logs Directory Exists
-      - name: Ensure Logs Directory Exists
-        run: mkdir -p $GITHUB_WORKSPACE/logs
-
-      # Copy Logs to Logs Directory
-      - name: Copy Logs to Logs Directory
-        run: |
-          cp terraform_validate.log $GITHUB_WORKSPACE/logs/ || true
-          cp terraform_plan.log $GITHUB_WORKSPACE/logs/ || true
-          cp terraform_apply.log $GITHUB_WORKSPACE/logs/ || true
-
-      # Upload Logs as Artifacts
-      - name: Upload Terraform Logs as Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: terraform-logs
-          path: logs/
-
-      # Upload Logs to S3 (Both Success and Failure)
-      - name: Upload Logs to S3
-        if: always()  # Ensure this runs even if the workflow fails
-        run: |
+          echo "Uploading Terraform logs to S3..."
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
-
-      # Generate Workflow Run Link
-      - name: Generate workflow run link
-        id: generate_link
-        run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
-
-      # Send SNS Notification (Success or Failure)
-      - name: Send SNS Notification
-        if: always()  # Ensure this runs even if the workflow fails or succeeds
-        run: |
-          if [[ "${{ env.FAILURE_FLAG }}" == "true" ]]; then
-            SUBJECT="Terraform Workflow Status - failure"
-            BODY="The Terraform workflow has failed. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
-          else
-            SUBJECT="Terraform Workflow Status - success"
-            BODY="The Terraform workflow has completed successfully. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
-          fi
-
-          aws sns publish \
-            --topic-arn arn:aws:sns:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${{ secrets.SNS_TOPIC_NAME }} \
-            --message "$BODY" \
-            --subject "$SUBJECT"
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
 
   deploy:
     needs: terraform
@@ -136,29 +78,16 @@ jobs:
       # Deploy the app to the AWS S3 bucket created by Terraform
       - name: Deploy React App to S3
         run: |
-          aws s3 cp build/ s3://${{ secrets.S3_BUCKET_NAME }}/ --recursive
+          aws s3 cp dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ --recursive
 
       # Invalidate CloudFront Cache
       - name: Invalidate CloudFront Cache
         run: |
           aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
 
-      # Collect logs from deployment
-      - name: Collect Deployment Logs
-        run: |
-          echo "Deployment logs:" > $GITHUB_WORKSPACE/logs/deployment.log
-          echo "Deployment started at $(date)" >> $GITHUB_WORKSPACE/logs/deployment.log
-          echo "Deploying to S3..." >> $GITHUB_WORKSPACE/logs/deployment.log
-
-      # Upload Deployment Logs as Artifacts
-      - name: Upload Deployment Logs as Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: deployment-logs
-          path: logs/
-
       # Upload Deployment Logs to S3
       - name: Upload Deployment Logs to S3
-        if: always()  # Ensure this runs even if the workflow fails
+        if: always()
         run: |
+          echo "Uploading deployment logs to S3..."
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
