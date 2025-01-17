@@ -1,4 +1,4 @@
-name: React Project Build and Deployment
+name: Terraform Infrastructure and React App Deployment with Logs
 
 on:
   #push:
@@ -6,84 +6,159 @@ on:
       - main
 
 jobs:
-  build-and-test:
+  terraform:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC
+      contents: read   # Required to access repository contents
 
     steps:
-      # Step 1: Checkout the repository
+      # Checkout the code
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      # Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          node-version: '18'
+          terraform_version: 1.5.6
 
-      # Step 3: Install Dependencies
-      - name: Install Dependencies
-        run: npm install
+      # Setup AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 4: Run CI (with additional environment variables)
-      - name: Run CI
-        run: npm run ci
-
-      # Step 5: Run Tests
-      - name: Run Tests
-        run: |
-          npm test || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
+      # Initialize Terraform (INFO logging)
+      - name: Terraform Init
         env:
-          CI: true  # Ensures Jest (or any test framework) runs in CI mode
+          TF_LOG: INFO  # Set Terraform logging to INFO for general info messages
+        run: terraform init
 
-      # Step 6: Build the React App
-      - name: Build React App
-        run: |
-          npm run build || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-
-      # Step 7: Log project structure (Success or Failure)
-      - name: Log Project Structure
-        run: tree -a > project_structure.log
-
-      # Step 8: Archive Logs and Artifacts
-      - name: Archive Logs and Artifacts
-        run: |
-          mkdir -p logs
-          cp project_structure.log logs/
-          cp -r build logs/build || true
+      # Terraform Validate (DEBUG logging)
+      - name: Terraform Validate
         env:
-          FAILURE_FLAG: ${{ env.FAILURE_FLAG }}
+          TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed logs
+          TF_LOG_PATH: terraform_validate.log
+        run: |
+          terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
+          true  # Always continue execution
 
-      # Step 9: Upload Logs as Artifacts
-      - name: Upload Logs as Artifacts
+      # Terraform Plan (INFO logging)
+      - name: Terraform Plan
+        env:
+          TF_LOG: INFO  # Set Terraform logging to INFO for plan-related logs
+          TF_LOG_PATH: terraform_plan.log
+        run: |
+          terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
+          true  # Always continue execution
+
+      # Terraform Apply (TRACE logging)
+      - name: Terraform Apply
+        env:
+          TF_LOG: TRACE  # Set Terraform logging to TRACE for detailed logs
+          TF_LOG_PATH: terraform_apply.log
+        run: |
+          terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
+          true  # Always continue execution
+
+      # Ensure Logs Directory Exists
+      - name: Ensure Logs Directory Exists
+        run: mkdir -p $GITHUB_WORKSPACE/logs
+
+      # Copy Logs to Logs Directory
+      - name: Copy Logs to Logs Directory
+        run: |
+          cp terraform_validate.log $GITHUB_WORKSPACE/logs/ || true
+          cp terraform_plan.log $GITHUB_WORKSPACE/logs/ || true
+          cp terraform_apply.log $GITHUB_WORKSPACE/logs/ || true
+
+      # Upload Logs as Artifacts
+      - name: Upload Terraform Logs as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: logs
+          name: terraform-logs
           path: logs/
 
-      # Step 10: Upload Logs to S3
+      # Upload Logs to S3 (Both Success and Failure)
       - name: Upload Logs to S3
-        if: always()  # Run even if previous steps fail
+        if: always()  # Ensure this runs even if the workflow fails
         run: |
-          aws s3 cp logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
+          aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
 
-      # Step 11: Send SNS Notification
+      # Generate Workflow Run Link
+      - name: Generate workflow run link
+        id: generate_link
+        run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
+
+      # Send SNS Notification (Success or Failure)
       - name: Send SNS Notification
-        if: always()
+        if: always()  # Ensure this runs even if the workflow fails or succeeds
         run: |
           if [[ "${{ env.FAILURE_FLAG }}" == "true" ]]; then
-            SUBJECT="React Workflow Status - Failure"
-            BODY="The workflow failed. Check logs for details. View run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            SUBJECT="Terraform Workflow Status - failure"
+            BODY="The Terraform workflow has failed. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           else
-            SUBJECT="React Workflow Status - Success"
-            BODY="The workflow succeeded. Check logs for details. View run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            SUBJECT="Terraform Workflow Status - success"
+            BODY="The Terraform workflow has completed successfully. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           fi
 
           aws sns publish \
             --topic-arn arn:aws:sns:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${{ secrets.SNS_TOPIC_NAME }} \
             --message "$BODY" \
             --subject "$SUBJECT"
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      # Step 12: Fail Workflow if Needed
-      - name: Fail Workflow if Any Step Failed
-        if: ${{ env.FAILURE_FLAG == 'true' }}
-        run: exit 1
+  deploy:
+    needs: terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code again for deployment
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Set up Node.js and install dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Build the React App
+      - name: Build React App
+        run: npm run build
+
+      # Deploy the app to the AWS S3 bucket created by Terraform
+      - name: Deploy React App to S3
+        run: |
+          aws s3 cp build/ s3://${{ secrets.S3_BUCKET_NAME }}/ --recursive
+
+      # Invalidate CloudFront Cache
+      - name: Invalidate CloudFront Cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
+
+      # Collect logs from deployment
+      - name: Collect Deployment Logs
+        run: |
+          echo "Deployment logs:" > $GITHUB_WORKSPACE/logs/deployment.log
+          echo "Deployment started at $(date)" >> $GITHUB_WORKSPACE/logs/deployment.log
+          echo "Deploying to S3..." >> $GITHUB_WORKSPACE/logs/deployment.log
+
+      # Upload Deployment Logs as Artifacts
+      - name: Upload Deployment Logs as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-logs
+          path: logs/
+
+      # Upload Deployment Logs to S3
+      - name: Upload Deployment Logs to S3
+        if: always()  # Ensure this runs even if the workflow fails
+        run: |
+          aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
