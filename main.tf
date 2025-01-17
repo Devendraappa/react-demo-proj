@@ -10,7 +10,6 @@ resource "random_id" "id" {
 # S3 Bucket resource for React App
 resource "aws_s3_bucket" "react_app_bucket" {
   bucket = "react-demo-app-bucket-${random_id.id.hex}"
-  acl    = "public-read"  # Make the bucket publicly readable
 
   # Enable static website hosting
   website {
@@ -21,11 +20,11 @@ resource "aws_s3_bucket" "react_app_bucket" {
 
 # Upload React App build files to S3
 resource "aws_s3_bucket_object" "react_app_files" {
-  for_each = fileset("./build", "**/*")
+  for_each = fileset("./dist", "**/*")
   bucket   = aws_s3_bucket.react_app_bucket.bucket
   key      = each.key
-  source   = "./build/${each.key}"
-  acl      = "public-read"
+  source   = "./dist/${each.key}"
+  # Remove the ACL setting
 }
 
 # Output the S3 bucket website URL
