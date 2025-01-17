@@ -1,5 +1,12 @@
 provider "aws" {
-  region = "ap-south-1"
+  region = var.region
+}
+
+# Declare the region variable
+variable "region" {
+  description = "The AWS region to create resources in"
+  type        = string
+  default     = "ap-south-1"
 }
 
 # Generate a random ID for the bucket name
@@ -68,5 +75,5 @@ resource "aws_s3_bucket_object" "react_app_files" {
 
 # Output the S3 bucket website URL
 output "s3_bucket_website_url" {
-  value = aws_s3_bucket.react_app_bucket.website_endpoint
+  value = "http://${aws_s3_bucket.react_app_bucket.bucket}.s3-website.${var.region}.amazonaws.com"
 }
