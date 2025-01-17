@@ -1,4 +1,4 @@
-name: Terraform Infrastructure and React App Deployment with Logs 
+name: Terraform Infrastructure and React App Deployment with Logs
 
 on:
   push:
