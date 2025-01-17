@@ -1,7 +1,7 @@
-name: Deploy React App to S3 
+name: Deploy React App to S3
 
 on:
-  #push:
+  push:
     branches:
       - main
 
@@ -48,7 +48,24 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
- 
+
+      # Step 8: Check if State is Locked
+      - name: Check if State is Locked
+        id: check_lock
+        run: |
+          LOCK_ID=$(terraform show -json | jq -r '.lock_info.ID // empty')
+          echo "LOCK_ID=$LOCK_ID" >> $GITHUB_ENV
+          if [ -n "$LOCK_ID" ]; then
+            echo "LOCKED=true" >> $GITHUB_ENV
+          else
+            echo "LOCKED=false" >> $GITHUB_ENV
+          fi
+
+      # Step 9: Force Unlock Terraform State if Locked
+      - name: Force Unlock Terraform State
+        if: env.LOCKED == 'true'
+        run: terraform force-unlock ${{ env.LOCK_ID }}
+
       # Step 10: Initialize Terraform (INFO logging)
       - name: Terraform Init
         env:
@@ -157,7 +174,7 @@ jobs:
           echo "One or more Terraform steps failed. Marking workflow as failed."
           exit 1  # Exit with failure status
 
-      # Step 22: Deploy React App to S3
-      - name: Deploy React App to S3
+      # Step 22: Deploy React App to New S3 Bucket
+      - name: Deploy React App to New S3 Bucket
         run: |
-          aws s3 sync build/ s3://${{ secrets.S3_BUCKET_NAME }}/ --delete
+          aws s3 sync dist/ s3://$(terraform output -raw s3_bucket_website_url) --delete
