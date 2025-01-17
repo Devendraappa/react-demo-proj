@@ -49,17 +49,17 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 8: Capture LOCK_ID if State is Locked
-      - name: Capture LOCK_ID if State is Locked
-        id: capture_lock_id
+      # Step 8: Check if State is Locked
+      - name: Check if State is Locked
+        id: check_lock
         run: |
-          LOCK_ID=$(terraform show -json | jq -r '.lock_info.ID // empty')
-          echo "LOCK_ID=$LOCK_ID" >> $GITHUB_ENV
+          terraform show -json | jq -e '.lock_info.ID' > /dev/null 2>&1 && echo "LOCKED=true" || echo "LOCKED=false"
+        continue-on-error: true
 
-      # Step 9: Force Unlock Terraform State if LOCK_ID is Present
+      # Step 9: Force Unlock Terraform State if Locked
       - name: Force Unlock Terraform State
-        if: env.LOCK_ID
-        run: terraform force-unlock ${{ env.LOCK_ID }}
+        if: steps.check_lock.outputs.LOCKED == 'true'
+        run: terraform force-unlock <LOCK_ID>  # Replace <LOCK_ID> with the actual lock ID
 
       # Step 10: Initialize Terraform (INFO logging)
       - name: Terraform Init
@@ -163,7 +163,6 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
       # Step 21: Fail Workflow if Any Step Failed
-      - name: Fail Workflow if Any Step Failed
         if: ${{ env.FAILURE_FLAG == 'true' }}
         run: |
           echo "One or more Terraform steps failed. Marking workflow as failed."
