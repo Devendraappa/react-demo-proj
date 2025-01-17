@@ -14,8 +14,33 @@ resource "aws_s3_bucket" "react_app_bucket" {
   # Enable static website hosting
   website {
     index_document = "index.html"
-    error_document = "index.html"
+    error_document = "error.html"
   }
+
+  # Enable versioning
+  versioning {
+    status = "Enabled"
+  }
+
+  # Enable public access
+  acl = "public-read"
+}
+
+# Bucket policy to allow public read access
+resource "aws_s3_bucket_policy" "public_read_policy" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.react_app_bucket.arn}/*"
+      }
+    ]
+  })
 }
 
 # Upload React App build files to S3
@@ -24,6 +49,7 @@ resource "aws_s3_bucket_object" "react_app_files" {
   bucket   = aws_s3_bucket.react_app_bucket.bucket
   key      = each.key
   source   = "./dist/${each.key}"
+  acl      = "public-read"
 }
 
 # Output the S3 bucket website URL
