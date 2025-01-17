@@ -4,9 +4,8 @@ provider "aws" {
 
 # S3 Bucket resource for React App
 resource "aws_s3_bucket" "react_app_bucket" {
-  bucket = "react-demo-app-bucket9659"
-
-  acl    = "private"  # ACL setting, no longer conflicting with ownership settings
+   bucket = "react-demo-app-bucket-${random_pet.unique_suffix.id}"
+  acl    = "public-read"  # ACL setting, no longer conflicting with ownership settings
 
   # Enable static website hosting
   website {
@@ -23,13 +22,14 @@ resource "aws_s3_bucket_object" "react_app_files" {
 }
 
 # CloudFront Distribution resource for serving React app from S3
+# CloudFront Distribution for React App
 resource "aws_cloudfront_distribution" "react_app_distribution" {
   origin {
     domain_name = aws_s3_bucket.react_app_bucket.bucket_regional_domain_name
     origin_id   = "S3-${aws_s3_bucket.react_app_bucket.id}"
 
     s3_origin_config {
-      origin_access_identity = "origin-access-identity/cloudfront/EXAMPLE"  # Replace with actual OAI if needed
+      origin_access_identity = "origin-access-identity/cloudfront/EXAMPLE"
     }
   }
 
@@ -38,44 +38,33 @@ resource "aws_cloudfront_distribution" "react_app_distribution" {
   comment             = "React App CloudFront Distribution"
   default_root_object = "index.html"
 
-  # Add Restrictions block (optional, add if needed)
   restrictions {
     geo_restriction {
-      restriction_type = "none"  # Change as per region restrictions
+      restriction_type = "none"
     }
   }
 
-  # Add Viewer Certificate block (optional if using custom domain)
   viewer_certificate {
-    cloudfront_default_certificate = true  # Use CloudFront's default SSL certificate
-    # Uncomment below for custom SSL
-    # acm_certificate_arn = "arn:aws:acm:region:account-id:certificate/certificate-id"
-    # ssl_support_method = "sni-only"
+    cloudfront_default_certificate = true
   }
 
-  # Default Cache Behavior with required arguments
   default_cache_behavior {
     viewer_protocol_policy = "redirect-to-https"
-    target_origin_id      = "S3-${aws_s3_bucket.react_app_bucket.id}"
+    target_origin_id       = "S3-${aws_s3_bucket.react_app_bucket.id}"
 
-    allowed_methods = ["GET", "HEAD"]  # Correct format for allowed_methods
-    cached_methods  = ["GET", "HEAD"]  # Correct format for cached_methods
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
 
     forwarded_values {
-      query_string = false  # Set to true if query string forwarding is needed
-
+      query_string = false
       cookies {
-        forward = "none"  # Adjust if you need cookie forwarding
+        forward = "none"
       }
     }
   }
-
   # Optional Logging Configuration
-  logging_config {
-    include_cookies = false
-    bucket           = "your-log-bucket-name.s3.amazonaws.com"  # Replace with actual log bucket name
-    prefix           = "cloudfront-logs/"
-  }
-
-  price_class = "PriceClass_100"  # Adjust price class based on your requirements
+ logging_config {
+  include_cookies = false
+  bucket           = "${aws_s3_bucket.react_app_bucket.bucket}.s3.amazonaws.com"
+  prefix           = "cloudfront-logs/"
 }
