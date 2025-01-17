@@ -4,7 +4,7 @@ provider "aws" {
 
 # S3 Bucket resource for React App
 resource "aws_s3_bucket" "react_app_bucket" {
-   bucket = "react-demo-app-bucket-${random_pet.unique_suffix.id}"
+  bucket = "react-demo-app-bucket-${random_pet.unique_suffix.id}"
   acl    = "public-read"  # ACL setting, no longer conflicting with ownership settings
 
   # Enable static website hosting
@@ -12,6 +12,7 @@ resource "aws_s3_bucket" "react_app_bucket" {
     index_document = "index.html"
   }
 }
+
 # Upload React App build files to S3
 resource "aws_s3_bucket_object" "react_app_files" {
   for_each = fileset("./build", "**/*")
@@ -21,7 +22,6 @@ resource "aws_s3_bucket_object" "react_app_files" {
   acl      = "public-read"
 }
 
-# CloudFront Distribution resource for serving React app from S3
 # CloudFront Distribution for React App
 resource "aws_cloudfront_distribution" "react_app_distribution" {
   origin {
@@ -62,9 +62,13 @@ resource "aws_cloudfront_distribution" "react_app_distribution" {
       }
     }
   }
+
   # Optional Logging Configuration
- logging_config {
-  include_cookies = false
-  bucket           = "${aws_s3_bucket.react_app_bucket.bucket}.s3.amazonaws.com"
-  prefix           = "cloudfront-logs/"
+  logging_config {
+    include_cookies = false
+    bucket           = "${aws_s3_bucket.react_app_bucket.bucket}.s3.amazonaws.com"
+    prefix           = "cloudfront-logs/"
+  }
+
+  price_class = "PriceClass_100"
 }
