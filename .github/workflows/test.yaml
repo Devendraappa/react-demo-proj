@@ -1,4 +1,4 @@
-name: Deploy React App to S3
+me: Deploy React App to S3
 
 on:
   push:
@@ -161,7 +161,12 @@ jobs:
           echo "One or more Terraform steps failed. Marking workflow as failed."
           exit 1  # Exit with failure status
 
-      # Step 20: Deploy React App to New S3 Bucket
+      # Step 20: Capture S3 Bucket URL
+      - name: Capture S3 Bucket URL
+        id: capture_s3_url
+        run: echo "S3_BUCKET_URL=$(terraform output -raw s3_bucket_website_url)" >> $GITHUB_ENV
+
+      # Step 21: Deploy React App to New S3 Bucket
       - name: Deploy React App to New S3 Bucket
         run: |
-          aws s3 sync dist/ s3://$(terraform output -raw s3_bucket_website_url) --delete
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_URL }} --delete
