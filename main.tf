@@ -4,8 +4,11 @@ provider "aws" {
 
 # S3 Bucket resource for React App
 resource "aws_s3_bucket" "react_app_bucket" {
-  bucket = "react-demo-app-bucket-${random_pet.unique_suffix.id}"
-  acl    = "public-read"  # ACL setting, no longer conflicting with ownership settings
+  bucket = "react-demo-app-bucket-${random_id.id.hex}"
+  acl    = "private"  # ACL setting, no longer conflicting with ownership settings
+resource "random_id" "id" {
+  byte_length = 8
+}
 
   # Enable static website hosting
   website {
