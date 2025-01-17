@@ -21,6 +21,14 @@ resource "aws_s3_bucket" "react_app_bucket" {
   acl = "public-read"
 }
 
+# Disable BlockPublicAcls setting
+resource "aws_s3_bucket_public_access_block" "public_access_block" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  block_public_acls   = false
+  block_public_policy = false
+}
+
 # Enable versioning
 resource "aws_s3_bucket_versioning" "versioning" {
   bucket = aws_s3_bucket.react_app_bucket.id
