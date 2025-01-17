@@ -161,11 +161,13 @@ jobs:
           echo "One or more Terraform steps failed. Marking workflow as failed."
           exit 1  # Exit with failure status
 
-      # Step 20: Capture S3 Bucket URL
-      - name: Capture S3 Bucket URL
-        id: capture_s3_url
-        run: echo "S3_BUCKET_URL=$(terraform output -raw s3_bucket_website_url)" >> $GITHUB_ENV
+      - name: Set S3 bucket URL
+        id: s3_url
+        run: echo "::set-output name=s3_bucket_url::$(terraform output -raw s3_bucket_website_url)"
 
+      - name: Use S3 bucket URL
+        run: echo "S3_BUCKET_URL=${{ steps.s3_url.outputs.s3_bucket_url }}" >> $GITHUB_ENV
+        
       # Step 21: Deploy React App to New S3 Bucket
       - name: Deploy React App to New S3 Bucket
         run: |
