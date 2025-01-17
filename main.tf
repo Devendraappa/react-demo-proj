@@ -59,10 +59,8 @@ resource "aws_cloudfront_distribution" "react_app_distribution" {
     viewer_protocol_policy = "redirect-to-https"
     target_origin_id      = "S3-${aws_s3_bucket.react_app_bucket.id}"
 
-    allowed_methods {
-      cached_methods = ["GET", "HEAD"]
-      methods        = ["GET", "HEAD"]
-    }
+    allowed_methods = ["GET", "HEAD"]  # Correct format for allowed_methods
+    cached_methods  = ["GET", "HEAD"]  # Correct format for cached_methods
 
     forwarded_values {
       query_string = false  # Set to true if query string forwarding is needed
