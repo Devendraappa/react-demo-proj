@@ -6,12 +6,7 @@ provider "aws" {
 resource "aws_s3_bucket" "react_app_bucket" {
   bucket = "react-demo-app-bucket9659"
 
-  # Add bucket ownership control to enforce bucket owner control
-  bucket_ownership_controls {
-    rule {
-      object_ownership = "BucketOwnerEnforced"
-    }
-  }
+  acl    = "private"  # ACL setting, no longer conflicting with ownership settings
 
   # Enable static website hosting
   website {
