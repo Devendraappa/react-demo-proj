@@ -5,18 +5,17 @@ provider "aws" {
 # S3 Bucket resource for React App
 resource "aws_s3_bucket" "react_app_bucket" {
   bucket = "react-demo-app-bucket9659"
-  
-  # Remove acl to avoid the conflict
-  # acl    = "public-read"  # This line should be removed
-  
-  object_ownership {
-    rule = "BucketOwnerEnforced"  # Ensure the bucket owner controls all objects
+
+  # Add bucket ownership control to enforce bucket owner control
+  bucket_ownership_controls {
+    rule {
+      object_ownership = "BucketOwnerEnforced"
+    }
   }
 
   # Enable static website hosting
   website {
     index_document = "index.html"
-    # error_document = "error.html"  # Optional, if you have custom error page
   }
 }
 # Upload React App build files to S3
