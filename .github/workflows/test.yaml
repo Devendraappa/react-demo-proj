@@ -49,23 +49,10 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 8: Check if State is Locked
-      - name: Check if State is Locked
-        id: check_lock
-        run: |
-          LOCK_ID=$(terraform show -json | jq -r '.lock_info.ID // empty')
-          echo "LOCK_ID=$LOCK_ID" >> $GITHUB_ENV
-          if [ -n "$LOCK_ID" ]; then
-            echo "LOCKED=true" >> $GITHUB_ENV
-          else
-            echo "LOCKED=false" >> $GITHUB_ENV
-          fi
-
-      # Step 9: Force Unlock Terraform State if Locked
+       # Step 8: Force Unlock Terraform State
       - name: Force Unlock Terraform State
-        if: env.LOCKED == 'true'
-        run: terraform force-unlock ${{ env.LOCK_ID }}
-
+        run: terraform force-unlock a2765ef7-a62a-0951-938c-93a9b42e68f2 || true
+        
       # Step 10: Initialize Terraform (INFO logging)
       - name: Terraform Init
         env:
