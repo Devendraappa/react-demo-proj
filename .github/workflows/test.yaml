@@ -1,8 +1,3 @@
-To handle the state lock error in your GitHub Actions workflow, you can add a step to force unlock the state before running the Terraform commands. Here's how you can integrate this into your existing workflow:
-
-### Updated GitHub Actions Workflow
-
-```yaml
 name: Terraform Workflow with OIDC, SNS Notification, and Logs Upload to S3
 
 on:
