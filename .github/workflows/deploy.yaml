@@ -1,7 +1,7 @@
 name: Deployment proj
 
 on:
-  push:
+  #push:
     branches:
       - main  # or any other branch you want to trigger this workflow
 
