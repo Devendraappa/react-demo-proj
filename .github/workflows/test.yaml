@@ -163,6 +163,7 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
       # Step 21: Fail Workflow if Any Step Failed
+      - name: Fail Workflow if Any Step Failed
         if: ${{ env.FAILURE_FLAG == 'true' }}
         run: |
           echo "One or more Terraform steps failed. Marking workflow as failed."
