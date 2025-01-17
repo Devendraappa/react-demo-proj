@@ -1,6 +1,6 @@
 name: Destroy Terraform Workflow
 on:
-  workflow_dispatch:
+  push:
 
 permissions:
   contents: read
