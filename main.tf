@@ -17,13 +17,17 @@ resource "aws_s3_bucket" "react_app_bucket" {
     error_document = "error.html"
   }
 
-  # Enable versioning
-  versioning {
-    status = "Enabled"
-  }
-
   # Enable public access
   acl = "public-read"
+}
+
+# Enable versioning
+resource "aws_s3_bucket_versioning" "versioning" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 # Bucket policy to allow public read access
