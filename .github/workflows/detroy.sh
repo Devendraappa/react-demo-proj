@@ -1,4 +1,4 @@
-name: Destroy Terraform Workflow
+name: Destroy Terraform Workflow 
 on:
   push:
     branches:
