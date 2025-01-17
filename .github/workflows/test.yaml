@@ -49,30 +49,13 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 8: Check if State is Locked
-      - name: Check if State is Locked
-        id: check_lock
-        run: |
-          LOCK_ID=$(terraform show -json | jq -r '.lock_info.ID // empty')
-          echo "LOCK_ID=$LOCK_ID" >> $GITHUB_ENV
-          if [ -n "$LOCK_ID" ]; then
-            echo "LOCKED=true" >> $GITHUB_ENV
-          else
-            echo "LOCKED=false" >> $GITHUB_ENV
-          fi
-
-      # Step 9: Force Unlock Terraform State if Locked
-      - name: Force Unlock Terraform State
-        if: env.LOCKED == 'true'
-        run: terraform force-unlock ${{ env.LOCK_ID }}
-
-      # Step 10: Initialize Terraform (INFO logging)
+      # Step 8: Initialize Terraform (INFO logging)
       - name: Terraform Init
         env:
           TF_LOG: INFO  # Set Terraform logging to INFO for general info messages
         run: terraform init
 
-      # Step 11: Terraform Validate (DEBUG logging)
+      # Step 9: Terraform Validate (DEBUG logging)
       - name: Terraform Validate
         env:
           TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed logs
@@ -81,7 +64,7 @@ jobs:
           terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true  # Always continue execution
 
-      # Step 12: Terraform Plan (INFO logging)
+      # Step 10: Terraform Plan (INFO logging)
       - name: Terraform Plan
         env:
           TF_LOG: INFO  # Set Terraform logging to INFO for plan-related logs
@@ -90,7 +73,7 @@ jobs:
           terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true  # Always continue execution
 
-      # Step 13: Terraform Apply (TRACE logging)
+      # Step 11: Terraform Apply (TRACE logging)
       - name: Terraform Apply
         env:
           TF_LOG: TRACE  # Set Terraform logging to TRACE for detailed logs
@@ -99,13 +82,13 @@ jobs:
           terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true  # Always continue execution
 
-      # Step 14: Ensure Logs Directory Exists (DEBUG logging)
+      # Step 12: Ensure Logs Directory Exists (DEBUG logging)
       - name: Ensure Logs Directory Exists
         env:
           TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed process steps
         run: mkdir -p $GITHUB_WORKSPACE/logs
 
-      # Step 15: Copy Logs to Logs Directory (WARN logging)
+      # Step 13: Copy Logs to Logs Directory (WARN logging)
       - name: Copy Logs to Logs Directory
         env:
           TF_LOG: WARN  # Set Terraform logging to WARN to capture potential issues
@@ -116,7 +99,7 @@ jobs:
           echo "Files in logs directory:"
           ls -alh $GITHUB_WORKSPACE/logs/
 
-      # Step 16: Print Logs on Failure (ERROR logging)
+      # Step 14: Print Logs on Failure (ERROR logging)
       - name: Print Logs on Failure
         if: failure()  # Only print logs if failure occurs
         env:
@@ -127,7 +110,7 @@ jobs:
           cat $GITHUB_WORKSPACE/logs/terraform_plan.log || true
           cat $GITHUB_WORKSPACE/logs/terraform_apply.log || true
 
-      # Step 17: Upload Terraform Logs as Artifacts (Always, even on failure)
+      # Step 15: Upload Terraform Logs as Artifacts (Always, even on failure)
       - name: Upload Terraform Logs as Artifacts
         if: always()  # Ensure this runs even if the workflow fails
         uses: actions/upload-artifact@v3
@@ -135,18 +118,22 @@ jobs:
           name: terraform-logs
           path: logs/
       
-      # Step 18: Upload Logs to S3 (Both Success and Failure)
+      # Step 16: Upload Logs to S3 (Both Success and Failure)
       - name: Upload Logs to S3
         if: always()  # Ensure this runs even if the workflow fails
         run: |
-          aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
+          if [ -d "$GITHUB_WORKSPACE/logs" ]; then
+            aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
+          else
+            echo "Logs directory does not exist."
+          fi
 
-      # Step 19: Generate Workflow Run Link
+      # Step 17: Generate Workflow Run Link
       - name: Generate workflow run link
         id: generate_link
         run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
 
-      # Step 20: Send SNS Notification (Success or Failure)
+      # Step 18: Send SNS Notification (Success or Failure)
       - name: Send SNS Notification
         if: always()  # Ensure this runs even if the workflow fails or succeeds
         run: |
@@ -167,14 +154,14 @@ jobs:
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      # Step 21: Fail Workflow if Any Step Failed
+      # Step 19: Fail Workflow if Any Step Failed
       - name: Fail Workflow if Any Step Failed
         if: ${{ env.FAILURE_FLAG == 'true' }}
         run: |
           echo "One or more Terraform steps failed. Marking workflow as failed."
           exit 1  # Exit with failure status
 
-      # Step 22: Deploy React App to New S3 Bucket
+      # Step 20: Deploy React App to New S3 Bucket
       - name: Deploy React App to New S3 Bucket
         run: |
           aws s3 sync dist/ s3://$(terraform output -raw s3_bucket_website_url) --delete
