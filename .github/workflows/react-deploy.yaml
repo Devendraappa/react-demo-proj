@@ -1,7 +1,7 @@
 name: Terraform Infrastructure and React App Deployment with Logs
 
 on:
-  push:
+  #push:
     branches:
       - main
 
