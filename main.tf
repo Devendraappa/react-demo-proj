@@ -53,12 +53,11 @@ resource "aws_security_group" "nodejs_sg" {
   }
 }
 
-# EC2 Instance
 resource "aws_instance" "nodejs_instance" {
   ami                    = var.ami_id
   instance_type          = var.instance_type
   key_name               = var.key_pair_name  # Using the key pair name from the variable
-  security_group         = aws_security_group.nodejs_sg.name
+  security_groups        = [aws_security_group.nodejs_sg.name]  # Corrected here
   subnet_id             = aws_subnet.default_subnet.id
   associate_public_ip_address = true
 
