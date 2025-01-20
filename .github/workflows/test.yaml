@@ -1,7 +1,7 @@
-name: Terraform Workflow with OIDC, SNS Notification, and Logs Upload to S3
+name: Terraform Workflow with EC2 Deployment and Logs Upload to S3
 
 on:
-  #push: 
+  #push:
     branches:
       - main
 
@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      id-token: write
-      contents: read
+      id-token: write  # Required for OIDC
+      contents: read   # Required to access repository contents
 
     steps:
       # Step 1: Checkout the repository
@@ -31,13 +31,11 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 4: Initialize Terraform (INFO logging)
+      # Step 4: Initialize Terraform
       - name: Terraform Init
-        env:
-          TF_LOG: INFO
         run: terraform init
 
-      # Step 5: Terraform Validate (DEBUG logging)
+      # Step 5: Terraform Validate
       - name: Terraform Validate
         env:
           TF_LOG: DEBUG
@@ -46,7 +44,7 @@ jobs:
           terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 6: Terraform Plan (INFO logging)
+      # Step 6: Terraform Plan
       - name: Terraform Plan
         env:
           TF_LOG: INFO
@@ -55,7 +53,7 @@ jobs:
           terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 7: Terraform Apply (TRACE logging)
+      # Step 7: Terraform Apply
       - name: Terraform Apply
         env:
           TF_LOG: TRACE
@@ -64,23 +62,23 @@ jobs:
           terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 8: Retrieve S3 Bucket Name
-      - name: Retrieve S3 Bucket Name
-        id: output
+      # Step 8: Retrieve EC2 Public IP
+      - name: Retrieve EC2 Public IP
+        id: ec2_output
         run: |
-          S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name)
-          echo "S3_BUCKET_NAME=${S3_BUCKET_NAME}" >> $GITHUB_ENV
+          EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)
+          echo "EC2_PUBLIC_IP=${EC2_PUBLIC_IP}" >> $GITHUB_ENV
 
-      # Step 9: Ensure Logs Directory Exists (DEBUG logging)
+      # Step 9: Display EC2 Public IP
+      - name: Display EC2 Public IP
+        run: echo "Your application is deployed at: http://${{ env.EC2_PUBLIC_IP }}"
+
+      # Step 10: Ensure Logs Directory Exists
       - name: Ensure Logs Directory Exists
-        env:
-          TF_LOG: DEBUG
         run: mkdir -p $GITHUB_WORKSPACE/logs
 
-      # Step 10: Copy Logs to Logs Directory (WARN logging)
+      # Step 11: Copy Logs to Logs Directory
       - name: Copy Logs to Logs Directory
-        env:
-          TF_LOG: WARN
         run: |
           cp terraform_validate.log $GITHUB_WORKSPACE/logs/ || true
           cp terraform_plan.log $GITHUB_WORKSPACE/logs/ || true
@@ -88,45 +86,25 @@ jobs:
           echo "Files in logs directory:"
           ls -alh $GITHUB_WORKSPACE/logs/
 
-      # Step 11: Print Logs on Failure (ERROR logging)
-      - name: Print Logs on Failure
-        if: failure()
-        env:
-          TF_LOG: ERROR
-        run: |
-          echo "Terraform failed. Logs are as follows:"
-          cat $GITHUB_WORKSPACE/logs/terraform_validate.log || true
-          cat $GITHUB_WORKSPACE/logs/terraform_plan.log || true
-          cat $GITHUB_WORKSPACE/logs/terraform_apply.log || true
-
-      # Step 12: Upload Terraform Logs as Artifacts (Always, even on failure)
+      # Step 12: Upload Terraform Logs as Artifacts
       - name: Upload Terraform Logs as Artifacts
-        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: terraform-logs
           path: logs/
 
-      # Step 13: Upload Logs to S3 (Both Success and Failure)
+      # Step 13: Upload Logs to S3
       - name: Upload Logs to S3
         if: always()
         run: |
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
-      
-      # Step 14: Verify S3 Bucket Content (Deployment Verification)
-      - name: Verify S3 Bucket Content
-        run: |
-          echo "Verifying deployment in S3..."
-          aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/ --recursive
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       # Step 14: Generate Workflow Run Link
-      - name: Generate workflow run link
+      - name: Generate Workflow Run Link
         id: generate_link
         run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
 
-      # Step 15: Send SNS Notification (Success or Failure)
+      # Step 15: Send SNS Notification
       - name: Send SNS Notification
         if: always()
         run: |
@@ -135,15 +113,13 @@ jobs:
             BODY="The Terraform workflow has failed. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           else
             SUBJECT="Terraform Workflow Status - success"
-            BODY="The Terraform workflow has completed successfully. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
+            BODY="The Terraform workflow has completed successfully. View your application at: http://${{ env.EC2_PUBLIC_IP }}"
           fi
 
           aws sns publish \
             --topic-arn arn:aws:sns:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${{ secrets.SNS_TOPIC_NAME }} \
             --message "$BODY" \
             --subject "$SUBJECT"
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       # Step 16: Force Workflow Failure if Any Step Failed
       - name: Fail Workflow if Any Step Failed
