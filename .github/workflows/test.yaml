@@ -1,4 +1,4 @@
-name: Deploy React App to S3
+name: Terraform Workflow with OIDC, SNS Notification, and Logs Upload to s3
 
 on:
   #push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  terraform:
     runs-on: ubuntu-latest
 
     permissions:
@@ -18,126 +18,79 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Step 2: Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '14'
-
-      # Step 3: Install Dependencies
-      - name: Install Dependencies
-        run: npm install
-
-      # Step 4: Run Tests
-      - name: Run Tests
-        run: npm test
-
-      # Step 5: Build React App
-      - name: Build React App
-        run: npm run build
-
-      # Step 6: Setup Terraform
+      # Step 2: Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.6
 
-      # Step 7: Configure AWS Credentials using OIDC
+      # Step 3: Configure AWS Credentials using OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 8: Initialize Terraform (INFO logging)
+      # Step 4: Initialize Terraform
       - name: Terraform Init
         env:
-          TF_LOG: INFO  # Set Terraform logging to INFO for general info messages
+          TF_LOG: INFO
         run: terraform init
 
-      # Step 9: Terraform Validate (DEBUG logging)
+      # Step 5: Validate Terraform Configuration
       - name: Terraform Validate
         env:
-          TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed logs
+          TF_LOG: DEBUG
           TF_LOG_PATH: terraform_validate.log
-        run: |
-          terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
+        run: terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
 
-      # Step 10: Terraform Plan (INFO logging)
+      # Step 6: Terraform Plan
       - name: Terraform Plan
         env:
-          TF_LOG: INFO  # Set Terraform logging to INFO for plan-related logs
+          TF_LOG: INFO
           TF_LOG_PATH: terraform_plan.log
-        run: |
-          terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
+        run: terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
 
-      # Step 11: Terraform Apply (TRACE logging)
+      # Step 7: Terraform Apply
       - name: Terraform Apply
         env:
-          TF_LOG: TRACE  # Set Terraform logging to TRACE for detailed logs
+          TF_LOG: TRACE
           TF_LOG_PATH: terraform_apply.log
+        run: terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
+
+      # Step 8: Build React Application
+      - name: Build React App
         run: |
-          terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
-          true  # Always continue execution
+          npm install
+          npm run build
 
-      # Step 12: Ensure Logs Directory Exists (DEBUG logging)
-      - name: Ensure Logs Directory Exists
-        env:
-          TF_LOG: DEBUG  # Set Terraform logging to DEBUG for detailed process steps
-        run: mkdir -p $GITHUB_WORKSPACE/logs
-
-      # Step 13: Copy Logs to Logs Directory (WARN logging)
-      - name: Copy Logs to Logs Directory
-        env:
-          TF_LOG: WARN  # Set Terraform logging to WARN to capture potential issues
+      # Step 9: Retrieve the S3 bucket name from Terraform output
+      - name: Retrieve S3 Bucket Name
+        id: output
         run: |
-          cp terraform_validate.log $GITHUB_WORKSPACE/logs/ || true
-          cp terraform_plan.log $GITHUB_WORKSPACE/logs/ || true
-          cp terraform_apply.log $GITHUB_WORKSPACE/logs/ || true
-          echo "Files in logs directory:"
-          ls -alh $GITHUB_WORKSPACE/logs/
+          S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name)
+          echo "S3_BUCKET_NAME=${S3_BUCKET_NAME}" >> $GITHUB_ENV
 
-      # Step 14: Print Logs on Failure (ERROR logging)
-      - name: Print Logs on Failure
-        if: failure()  # Only print logs if failure occurs
-        env:
-          TF_LOG: ERROR  # Set Terraform logging to ERROR to capture critical failure messages
+      # Step 10: Upload React Build to S3
+      - name: Upload to S3
         run: |
-          echo "Terraform failed. Logs are as follows:"
-          cat $GITHUB_WORKSPACE/logs/terraform_validate.log || true
-          cat $GITHUB_WORKSPACE/logs/terraform_plan.log || true
-          cat $GITHUB_WORKSPACE/logs/terraform_apply.log || true
+          aws s3 sync ./build/ s3://${{ env.S3_BUCKET_NAME }} --delete
 
-      # Step 15: Upload Terraform Logs as Artifacts (Always, even on failure)
-      - name: Upload Terraform Logs as Artifacts
-        if: always()  # Ensure this runs even if the workflow fails
-        uses: actions/upload-artifact@v3
-        with:
-          name: terraform-logs
-          path: logs/
-      
-      # Step 16: Upload Logs to S3 (Both Success and Failure)
+      # Step 11: Upload Logs to S3 (optional)
       - name: Upload Logs to S3
-        if: always()  # Ensure this runs even if the workflow fails
+        if: always()
         run: |
-          if [ -d "$GITHUB_WORKSPACE/logs" ]; then
-            aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
-          else
-            echo "Logs directory does not exist."
-          fi
+          aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
 
-      # Step 17: Generate Workflow Run Link
+      # Step 12: Generate Workflow Run Link
       - name: Generate workflow run link
         id: generate_link
         run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
 
-      # Step 18: Send SNS Notification (Success or Failure)
+      # Step 13: Send SNS Notification (Success or Failure)
       - name: Send SNS Notification
-        if: always()  # Ensure this runs even if the workflow fails or succeeds
+        if: always()
         run: |
-          # Check the FAILURE_FLAG to determine whether the workflow failed
           if [[ "${{ env.FAILURE_FLAG }}" == "true" ]]; then
             SUBJECT="Terraform Workflow Status - failure"
             BODY="The Terraform workflow has failed. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
@@ -146,7 +99,6 @@ jobs:
             BODY="The Terraform workflow has completed successfully. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           fi
 
-          # Publish the SNS message with the status and the workflow URL
           aws sns publish \
             --topic-arn arn:aws:sns:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${{ secrets.SNS_TOPIC_NAME }} \
             --message "$BODY" \
@@ -154,24 +106,9 @@ jobs:
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      # Step 19: Fail Workflow if Any Step Failed
+      # Step 14: Force Workflow Failure if Any Step Failed
       - name: Fail Workflow if Any Step Failed
         if: ${{ env.FAILURE_FLAG == 'true' }}
         run: |
           echo "One or more Terraform steps failed. Marking workflow as failed."
-          exit 1  # Exit with failure status
-
-       # Step 20: Capture S3 bucket URL
-      - name: Capture S3 bucket URL
-        id: capture_s3_url
-        run: terraform output -raw s3_bucket_website_url > s3_url.txt
-      
-      # Step 21: Set S3 bucket URL
-      - name: Set S3 bucket URL
-        run: |
-          S3_BUCKET_URL=$(grep -oP '^[^:]*' s3_url.txt)
-          echo "S3_BUCKET_URL=${S3_BUCKET_URL}" >> $GITHUB_ENV
-
-      # Step 21: Print S3 bucket URL
-      - name: Capture S3 bucket URL
-        run: cat s3_url.txt
+          exit 1
