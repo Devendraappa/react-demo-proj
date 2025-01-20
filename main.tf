@@ -2,12 +2,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# EC2 Key Pair
-resource "aws_key_pair" "desktop" {
-  key_name   = "desktop"
-  public_key = file(var.public_key_path)
-}
-
 # Security Group for EC2
 resource "aws_security_group" "nodejs_sg" {
   name        = "nodejs-sg"
@@ -40,8 +34,8 @@ resource "aws_security_group" "nodejs_sg" {
 resource "aws_instance" "nodejs_instance" {
   ami                    = var.ami_id
   instance_type          = var.instance_type
-  key_name               = aws_key_pair.desktop.key_name
-  security_group        = aws_security_group.nodejs_sg.name
+  key_name               = var.key_pair_name  # Using the key pair name from the variable
+  security_group         = aws_security_group.nodejs_sg.name
   subnet_id             = var.subnet_id
   associate_public_ip_address = true
 
