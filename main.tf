@@ -2,11 +2,34 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Create a VPC if not exists
+resource "aws_vpc" "default_vpc" {
+  cidr_block = "10.0.0.0/16"
+  enable_dns_support = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "default-vpc"
+  }
+}
+
+# Create a subnet in the created VPC
+resource "aws_subnet" "default_subnet" {
+  vpc_id                  = aws_vpc.default_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = var.aws_region_availability_zone
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "default-subnet"
+  }
+}
+
 # Security Group for EC2
 resource "aws_security_group" "nodejs_sg" {
   name        = "nodejs-sg"
   description = "Allow inbound SSH and HTTP traffic"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.default_vpc.id
 
   ingress {
     from_port   = 22
@@ -36,7 +59,7 @@ resource "aws_instance" "nodejs_instance" {
   instance_type          = var.instance_type
   key_name               = var.key_pair_name  # Using the key pair name from the variable
   security_group         = aws_security_group.nodejs_sg.name
-  subnet_id             = var.subnet_id
+  subnet_id             = aws_subnet.default_subnet.id
   associate_public_ip_address = true
 
   tags = {
