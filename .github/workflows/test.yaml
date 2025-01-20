@@ -61,17 +61,21 @@ jobs:
           terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 8: Retrieve EC2 Public IP
-      - name: Retrieve EC2 Public IP
+      # Step 8: Retrieve EC2 Public IP and Public DNS
+      - name: Retrieve EC2 Public IP and Public DNS
         id: ec2_output
         run: |
           EC2_PUBLIC_IP=$(terraform output -raw ec2_instance_public_ip)
+          EC2_PUBLIC_DNS=$(terraform output -raw ec2_instance_public_dns)
           echo "EC2_PUBLIC_IP=${EC2_PUBLIC_IP}" >> $GITHUB_ENV
+          echo "EC2_PUBLIC_DNS=${EC2_PUBLIC_DNS}" >> $GITHUB_ENV
 
-      # Step 9: Display EC2 Public IP
-      - name: Display EC2 Public IP
+      # Step 9: Display EC2 Public IP and Public DNS
+      - name: Display EC2 Public IP and Public DNS
         run: |
           echo "Your application is deployed at: http://${{ env.EC2_PUBLIC_IP }}"
+          echo "Or via DNS: http://${{ env.EC2_PUBLIC_DNS }}"
+  
 
       # Step 10: Ensure Logs Directory Exists
       - name: Ensure Logs Directory Exists
