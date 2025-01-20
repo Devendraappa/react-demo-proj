@@ -91,12 +91,12 @@ jobs:
         with:
           name: terraform-logs
           path: logs/
-
       # Step 13: Upload Logs to S3
       - name: Upload Logs to S3
-        if: always()
+        if: always()  # Ensure this runs even if the workflow fails
         run: |
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
+
 
       # Step 14: Generate Workflow Run Link
       - name: Generate Workflow Run Link
