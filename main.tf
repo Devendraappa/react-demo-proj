@@ -2,23 +2,60 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Create a security group for the EC2 instance
-resource "aws_security_group" "ec2_security_group" {
-  name        = var.security_group_name
-  description = "Allow HTTP and SSH access"
+resource "aws_instance" "app_instance" {
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  key_name      = var.key_name
+
+  tags = {
+    Name = "ReactAppInstance"
+  }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              # Update the instance
+              sudo apt-get update -y
+              sudo apt-get upgrade -y
+              
+              # Install Node.js and npm
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+
+              # Install Git
+              sudo apt-get install -y git
+
+              # Clone the GitHub repository
+              git clone https://github.com/Devendraappa/react-demo-proj.git /home/ubuntu/react-demo-proj
+              cd /home/ubuntu/react-demo-proj
+
+              # Run application commands
+              npm install
+              npm run build
+              npm test
+              
+              # Start the application (example: serve using npm or a process manager like PM2)
+              npm start > /dev/null 2>&1 &
+              EOF
+
+  security_groups = [aws_security_group.app_sg.name]
+}
+
+resource "aws_security_group" "app_sg" {
+  name        = "react-app-sg"
+  description = "Allow SSH and HTTP access"
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allow SSH access from anywhere
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Allow HTTP access from anywhere
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -27,35 +64,17 @@ resource "aws_security_group" "ec2_security_group" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-# Create an EC2 instance
-resource "aws_instance" "web_server" {
-  ami           = "ami-0cda377a1b884a1bc"  # Amazon Linux 2 AMI in ap-south-1
-  instance_type = var.instance_type
-  key_name      = var.key_name
-
-  # Attach the security group
-  security_groups = [aws_security_group.ec2_security_group.name]
-
-  # User data to install Node.js and deploy the app
-  user_data = <<-EOF
-    #!/bin/bash
-    sudo yum update -y
-    sudo yum install -y nodejs npm
-    git clone https://github.com/Devendraappa/react-demo-proj.git /home/ec2-user/react-demo-proj
-    cd /home/ec2-user/react-demo-proj
-    npm install
-    nohup npm start &
-  EOF
 
   tags = {
-    Name = "React-App-Server"
+    Name = "ReactAppSG"
   }
 }
 
-# Output public IP of the EC2 instance
-output "ec2_public_ip" {
-  value = aws_instance.web_server.public_ip
-  description = "Public IP of the EC2 instance"
+# Output the public IP of the EC2 instance
+output "ec2_instance_public_ip" {
+  value = aws_instance.app_instance.public_ip
+}
+
+output "ec2_instance_public_dns" {
+  value = aws_instance.app_instance.public_dns
 }
