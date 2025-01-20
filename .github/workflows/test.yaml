@@ -65,7 +65,7 @@ jobs:
       - name: Retrieve EC2 Public IP
         id: ec2_output
         run: |
-          EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)
+          EC2_PUBLIC_IP=$(terraform output -raw ec2_instance_public_ip)
           echo "EC2_PUBLIC_IP=${EC2_PUBLIC_IP}" >> $GITHUB_ENV
 
       # Step 9: Display EC2 Public IP
