@@ -1,5 +1,4 @@
 name: Terraform Workflow with EC2 Deployment and Logs Upload to S3
-
 on:
   push:
     branches:
