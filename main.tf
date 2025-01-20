@@ -1,79 +1,60 @@
 provider "aws" {
-  region = var.region
+  region = var.aws_region
 }
 
-# Declare the region variable
-variable "region" {
-  description = "The AWS region to create resources in"
-  type        = string
-  default     = "ap-south-1"
+# Generate a unique ID for the S3 bucket to avoid name duplication
+resource "random_id" "bucket_id" {
+  byte_length = 8  # Generates a random 8-byte ID
 }
 
-# Generate a random ID for the bucket name
-resource "random_id" "id" {
-  byte_length = 8
-}
+# S3 Bucket for Hosting the React App with a random unique suffix
+resource "aws_s3_bucket" "react_app" {
+  bucket = "${var.s3_bucket_name}-${random_id.bucket_id.hex}"  # Append the random ID to the bucket name
+  acl    = "public-read"
 
-# S3 Bucket resource for React App
-resource "aws_s3_bucket" "react_app_bucket" {
-  bucket = "react-demo-app-bucket-${random_id.id.hex}"
-
-  # Enable static website hosting
   website {
     index_document = "index.html"
-    error_document = "error.html"
-  }
-
-  # Enable public access
-  acl = "public-read"
-}
-
-# Disable BlockPublicAcls and BlockPublicPolicy settings
-resource "aws_s3_bucket_public_access_block" "public_access_block" {
-  bucket = aws_s3_bucket.react_app_bucket.id
-
-  block_public_acls   = false
-  block_public_policy = false
-  ignore_public_acls  = false
-  restrict_public_buckets = false
-}
-
-# Enable versioning
-resource "aws_s3_bucket_versioning" "versioning" {
-  bucket = aws_s3_bucket.react_app_bucket.id
-
-  versioning_configuration {
-    status = "Enabled"
+    # error_document = "error.html"  # Uncomment if you want custom error page
   }
 }
 
-# Bucket policy to allow public read access
-resource "aws_s3_bucket_policy" "public_read_policy" {
-  bucket = aws_s3_bucket.react_app_bucket.id
+# Output the S3 bucket name to use in GitHub Actions
+output "s3_bucket_name" {
+  value = aws_s3_bucket.react_app.bucket
+}
 
-  policy = jsonencode({
+# IAM Role and Policy to allow access to the S3 bucket (optional)
+resource "aws_iam_role" "s3_role" {
+  name = "s3_bucket_access_role"
+
+  assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = "*"
-        Action = "s3:GetObject"
-        Resource = "${aws_s3_bucket.react_app_bucket.arn}/*"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
       }
-    ]
+    }]
   })
 }
 
-# Upload React App build files to S3
-resource "aws_s3_bucket_object" "react_app_files" {
-  for_each = fileset("./dist", "**/*")
-  bucket   = aws_s3_bucket.react_app_bucket.bucket
-  key      = each.key
-  source   = "./dist/${each.key}"
-  acl      = "public-read"
-}
+resource "aws_iam_role_policy" "s3_policy" {
+  name = "s3_bucket_access_policy"
+  role = aws_iam_role.s3_role.id
 
-# Output the S3 bucket website URL
-output "s3_bucket_website_url" {
-  value = "http://${aws_s3_bucket.react_app_bucket.bucket}.s3-website.${var.region}.amazonaws.com"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ]
+      Effect   = "Allow"
+      Resource = [
+        "${aws_s3_bucket.react_app.arn}/*",
+        "${aws_s3_bucket.react_app.arn}"
+      ]
+    }]
+  })
 }
