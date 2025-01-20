@@ -70,11 +70,13 @@ jobs:
 
       # Step 9: Display EC2 Public IP
       - name: Display EC2 Public IP
-        run: echo "Your application is deployed at: http://${{ env.EC2_PUBLIC_IP }}"
+        run: |
+          echo "Your application is deployed at: http://${{ env.EC2_PUBLIC_IP }}"
 
       # Step 10: Ensure Logs Directory Exists
       - name: Ensure Logs Directory Exists
         run: mkdir -p $GITHUB_WORKSPACE/logs
+
 
       # Step 11: Copy Logs to Logs Directory
       - name: Copy Logs to Logs Directory
