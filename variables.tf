@@ -5,10 +5,18 @@ variable "aws_region" {
   default     = "ap-south-1"
 }
 
+# Availability Zone within the region for subnet
+variable "aws_region_availability_zone" {
+  description = "The availability zone to create the subnet in"
+  type        = string
+  default     = "ap-south-1a"  # Change this if needed
+}
+
 # AMI ID for EC2 instance
 variable "ami_id" {
   description = "AMI ID for the EC2 instance"
   type        = string
+  default     = "ami-00bb6a80f01f03502"  # Example for Amazon Linux 2 (adjust for the region)
 }
 
 # EC2 Instance Type
@@ -18,20 +26,9 @@ variable "instance_type" {
   default     = "t2.micro"
 }
 
-# Subnet ID for the EC2 instance
-variable "subnet_id" {
-  description = "The subnet ID in which the EC2 instance will be created"
+# Key Pair Name for EC2 instance
+variable "key_pair_name" {
+  description = "The name of the existing key pair for EC2 instance"
   type        = string
-}
-
-# VPC ID
-variable "vpc_id" {
-  description = "The VPC ID where the security group will be applied"
-  type        = string
-}
-
-# Path to the public key for EC2 instance
-variable "public_key_path" {
-  description = "Path to the SSH public key file for EC2 instance"
-  type        = string
+  default     = "desktop"  # Replace with your key pair name in AWS
 }
