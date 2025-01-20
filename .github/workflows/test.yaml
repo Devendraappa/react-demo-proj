@@ -100,11 +100,17 @@ jobs:
             npm test
             npm run build
 
-      # Step 12: Upload Logs to S3 (Both Success and Failure)
+    # Step 12: Upload Logs to S3 (Both Success and Failure)
       - name: Upload Logs to S3
-        if: always()
+        if: always()  # Ensure this runs even if the workflow fails
         run: |
+          if [ -d "$GITHUB_WORKSPACE/logs" ]; then
+          echo "Logs directory exists, uploading logs to S3..."
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
+          else
+          echo "Logs directory not found, skipping upload."
+          fi
+
 
       # Step 13: Generate Workflow Run Link
       - name: Generate workflow run link
