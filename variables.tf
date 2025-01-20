@@ -1,26 +1,15 @@
-# AWS Region for resource deployment
 variable "aws_region" {
-  description = "AWS region to deploy resources"
-  type        = string
-  default     = "ap-south-1"  # Mumbai region
+  default = "ap-south-1"
 }
 
-# EC2 Instance Type
+variable "ami_id" {
+  default = "ami-00bb6a80f01f03502" # Replace with the correct AMI ID for your region
+}
+
 variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t2.micro"
+  default = "t2.micro"
 }
 
-# Key pair name for accessing the instance
 variable "key_name" {
-  description = "Name of the key pair to use for SSH access"
-  type        = string
-}
-
-# Security group name
-variable "security_group_name" {
-  description = "Name of the security group for the EC2 instance"
-  type        = string
-  default     = "ec2-security-group"
+  default = "desktop" # Replace with your actual key pair name
 }
