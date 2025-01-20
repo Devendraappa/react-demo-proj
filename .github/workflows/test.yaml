@@ -1,8 +1,8 @@
-name: Terraform Workflow with EC2 Deployment and Logs Upload to S3 
+name: Terraform Workflow with OIDC, SNS Notification, and Logs Upload to s3
 on:
-  push:
-    branches:
-      - main
+  #push: 
+   branches:
+    - main
 
 jobs:
   terraform:
@@ -30,11 +30,13 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 4: Initialize Terraform
+      # Step 4: Initialize Terraform (INFO logging)
       - name: Terraform Init
+        env:
+          TF_LOG: INFO
         run: terraform init
 
-      # Step 5: Terraform Validate
+      # Step 5: Terraform Validate (DEBUG logging)
       - name: Terraform Validate
         env:
           TF_LOG: DEBUG
@@ -43,7 +45,7 @@ jobs:
           terraform validate || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 6: Terraform Plan
+      # Step 6: Terraform Plan (INFO logging)
       - name: Terraform Plan
         env:
           TF_LOG: INFO
@@ -52,7 +54,7 @@ jobs:
           terraform plan -out=tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 7: Terraform Apply
+      # Step 7: Terraform Apply (TRACE logging)
       - name: Terraform Apply
         env:
           TF_LOG: TRACE
@@ -61,29 +63,22 @@ jobs:
           terraform apply -auto-approve tfplan || echo "FAILURE_FLAG=true" >> $GITHUB_ENV
           true
 
-      # Step 8: Retrieve EC2 Public IP and Public DNS
-      - name: Retrieve EC2 Public IP and Public DNS
-        id: ec2_output
+      # Step 8: Capture EC2 Public IP (after EC2 is provisioned)
+      - name: Capture EC2 Public IP
+        id: capture_ip
         run: |
-          EC2_PUBLIC_IP=$(terraform output -raw ec2_instance_public_ip)
-          EC2_PUBLIC_DNS=$(terraform output -raw ec2_instance_public_dns)
-          echo "EC2_PUBLIC_IP=${EC2_PUBLIC_IP}" >> $GITHUB_ENV
-          echo "EC2_PUBLIC_DNS=${EC2_PUBLIC_DNS}" >> $GITHUB_ENV
+          echo "EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
 
-      # Step 9: Display EC2 Public IP and Public DNS
-      - name: Display EC2 Public IP and Public DNS
-        run: |
-          echo "Your application is deployed at: http://${{ env.EC2_PUBLIC_IP }}"
-          echo "Or via DNS: http://${{ env.EC2_PUBLIC_DNS }}"
-  
-
-      # Step 10: Ensure Logs Directory Exists
+      # Step 9: Ensure Logs Directory Exists (DEBUG logging)
       - name: Ensure Logs Directory Exists
+        env:
+          TF_LOG: DEBUG
         run: mkdir -p $GITHUB_WORKSPACE/logs
 
-
-      # Step 11: Copy Logs to Logs Directory
+      # Step 10: Copy Logs to Logs Directory (WARN logging)
       - name: Copy Logs to Logs Directory
+        env:
+          TF_LOG: WARN
         run: |
           cp terraform_validate.log $GITHUB_WORKSPACE/logs/ || true
           cp terraform_plan.log $GITHUB_WORKSPACE/logs/ || true
@@ -91,25 +86,32 @@ jobs:
           echo "Files in logs directory:"
           ls -alh $GITHUB_WORKSPACE/logs/
 
-      # Step 12: Upload Terraform Logs as Artifacts
-      - name: Upload Terraform Logs as Artifacts
-        uses: actions/upload-artifact@v3
+      # Step 11: SSH into EC2 and Deploy Node.js App
+      - name: SSH into EC2 and Deploy Node.js App
+        uses: appleboy/ssh-action@v0.1.4
         with:
-          name: terraform-logs
-          path: logs/
-      # Step 13: Upload Logs to S3
+          host: ${{ env.EC2_PUBLIC_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_PRIVATE_KEY }}  # Assuming private key is stored as GitHub Secret
+          port: 22
+          script: |
+            cd /home/ec2-user/react-demo-proj
+            npm ci
+            npm test
+            npm run build
+
+      # Step 12: Upload Logs to S3 (Both Success and Failure)
       - name: Upload Logs to S3
-        if: always()  # Ensure this runs even if the workflow fails
+        if: always()
         run: |
           aws s3 cp $GITHUB_WORKSPACE/logs/ s3://${{ secrets.S3_BUCKET_NAME }}/logs/ --recursive
 
-
-      # Step 14: Generate Workflow Run Link
-      - name: Generate Workflow Run Link
+      # Step 13: Generate Workflow Run Link
+      - name: Generate workflow run link
         id: generate_link
         run: echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_ENV
 
-      # Step 15: Send SNS Notification
+      # Step 14: Send SNS Notification (Success or Failure)
       - name: Send SNS Notification
         if: always()
         run: |
@@ -118,15 +120,16 @@ jobs:
             BODY="The Terraform workflow has failed. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           else
             SUBJECT="Terraform Workflow Status - success"
-            BODY="The Terraform workflow has completed successfully. View your application at: http://${{ env.EC2_PUBLIC_IP }}"
+            BODY="The Terraform workflow has completed successfully. Please check the logs for details. View the workflow run here: ${{ env.run_url }}"
           fi
-
           aws sns publish \
             --topic-arn arn:aws:sns:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${{ secrets.SNS_TOPIC_NAME }} \
             --message "$BODY" \
             --subject "$SUBJECT"
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      # Step 16: Force Workflow Failure if Any Step Failed
+      # Step 15: Force Workflow Failure if Any Step Failed
       - name: Fail Workflow if Any Step Failed
         if: ${{ env.FAILURE_FLAG == 'true' }}
         run: |
